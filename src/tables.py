@@ -5,30 +5,13 @@ import duckdb
 import pandas as pd
 
 # Conectando ao banco de dados DuckDB
-con = duckdb.connect(database='path/to/src/database.duckdb', read_only=False) # botar caminho para o arquivo de banco de dados
+con = duckdb.connect(database='/Users/leonardo.giovanelli/Downloads/MC536-P2-main/src/database.duckdb', read_only=False) # botar caminho para o arquivo de banco de dados
 
 
 consultas = [
+    
     {
-        "descricao": "1. Escolas com mais de uma fonte de água",
-        "sql": """
-            SELECT 
-                no_entidade,
-                (
-                    CAST(SUM(CAST(in_agua_rede_publica AS INT)) +
-                        SUM(CAST(in_agua_poco_artesiano AS INT)) +
-                        SUM(CAST(in_agua_cacimba AS INT)) +
-                        SUM(CAST(in_agua_fonte_rio AS INT))
-                    AS INT)
-                ) AS fontes_agua
-            FROM escolas
-            GROUP BY no_entidade
-            HAVING fontes_agua > 1
-            ORDER BY fontes_agua DESC;
-        """
-    },
-    {
-        "descricao": "2. Escolas com internet apenas para administrativo",
+        "descricao": "1. Escolas com internet apenas para administrativo (CONSULTA P1 ADAPTADA)",
         "sql": """
             SELECT 
                 no_entidade,
@@ -41,13 +24,14 @@ consultas = [
         """
     },
     {
-        "descricao": "3. Melhores rendimentos no ENEM por escola",
+        "descricao": "2. Melhores rendimentos no ENEM por escola (CONSULTA P1 ADAPTADA)",
         "sql": """
             SELECT 
                 co_entidade,
                 no_entidade,
                 nu_ano_censo AS nu_ano,
-                nu_taxa_participacao,
+                sg_uf,
+                no_municipio,
                 nu_media_tot
             FROM escolas
             WHERE nu_media_tot IS NOT NULL
@@ -55,7 +39,7 @@ consultas = [
         """
     },
     {
-        "descricao": "Escolas com infraestrutura completa (água, energia e esgoto de rede publica com internet, biblioteca, banheiro e laboratório de informática presentes)",
+        "descricao": "3. Escolas com infraestrutura completa (água, energia e esgoto de rede publica com internet, biblioteca, banheiro e laboratório de informática presentes) (CONSULTA P1 ADAPTADA)",
         "sql": """
             SELECT 
                 no_entidade,
@@ -72,7 +56,7 @@ consultas = [
         """
     },
     {
-        "descricao": "5. Relação entre rendimento e dependência da escola",
+        "descricao": "4. Relação entre rendimento e dependência da escola (CONSULTA P1 ADAPTADA E VALIDA PARA P2)",
         "sql": """
             SELECT 
                 tp_dependencia,
@@ -87,7 +71,7 @@ consultas = [
         """
     },
     {
-        "descricao": "6. Distribuição de escolas por localização (urbana/rural) e porte",
+        "descricao": "5. Distribuição de escolas por localização (urbana/rural) e porte (CONSULTA P2)",
         "sql": """
             SELECT 
                 tp_localizacao,
@@ -99,22 +83,27 @@ consultas = [
         """
     },
     {
-        "descricao": "7. Escolas que oferecem internet mas não possuem laboratório de informática",
+        "descricao": "6. Escolas que oferecem internet mas não possuem laboratório de informática (CONSULTA P2)",
         "sql": """
             SELECT 
-                no_entidade,
                 sg_uf,
-                in_internet,
-                in_laboratorio_informatica
+                COUNT(*) FILTER (
+                    WHERE in_internet = TRUE 
+                    AND (in_laboratorio_informatica IS FALSE OR in_laboratorio_informatica IS NULL)
+                ) AS escolas_com_internet_sem_lab,
+                COUNT(*) AS total_escolas_estado,
+                ROUND(
+                    (COUNT(*) FILTER (
+                        WHERE in_internet = TRUE 
+                        AND (in_laboratorio_informatica IS FALSE OR in_laboratorio_informatica IS NULL)
+                    ) * 100.0 / COUNT(*)), 2) AS percentual
             FROM escolas
-            WHERE 
-                in_internet = TRUE AND
-                (in_laboratorio_informatica IS FALSE OR in_laboratorio_informatica IS NULL)
-            ORDER BY sg_uf;
+            GROUP BY sg_uf
+            ORDER BY percentual DESC;
         """
     },
     {
-        "descricao": "8. Classificação das escolas por faixa de taxa de participação no ENEM",
+        "descricao": "7. Classificação das escolas por faixa de taxa de participação no ENEM (CONSULTA P2)",
         "sql": """
             SELECT 
                 CASE 
@@ -128,7 +117,76 @@ consultas = [
             GROUP BY faixa_participacao
             ORDER BY qtd_escolas DESC;
         """
+    },
+    {
+         "descricao": "8. Distribuição percentual de escolas por localização e presença de energia elétrica (CONSULTA P2)",
+        "sql": """
+            SELECT 
+                tp_localizacao,
+                COUNT(*) AS total_escolas,
+                SUM(CAST(in_energia_rede_publica AS INT)) AS com_energia_rede,
+                ROUND(SUM(CAST(in_energia_rede_publica AS INT)) * 100.0 / COUNT(*), 2) AS percentual_com_energia
+            FROM escolas
+            GROUP BY tp_localizacao
+            ORDER BY percentual_com_energia DESC;
+        """
+    },
+    {
+        "descricao": "9. Percentual de Escolas com biblioteca e internet por região do País (CONSULTA P2)",
+        "sql": """
+            SELECT 
+                CASE 
+                    WHEN sg_uf IN ('AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO') THEN 'Norte'
+                    WHEN sg_uf IN ('AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE') THEN 'Nordeste'
+                    WHEN sg_uf IN ('DF', 'GO', 'MT', 'MS') THEN 'Centro-Oeste'
+                    WHEN sg_uf IN ('ES', 'MG', 'RJ', 'SP') THEN 'Sudeste'
+                    WHEN sg_uf IN ('PR', 'RS', 'SC') THEN 'Sul'
+                    ELSE 'Indefinida'
+                END AS regiao,
+                COUNT(*) AS total_escolas,
+                SUM(CAST((in_biblioteca AND in_internet) AS INT)) AS com_biblioteca_e_internet,
+                    ROUND(
+                    SUM(CAST((in_biblioteca AND in_internet) AS INT)) * 100.0 / COUNT(*), 2) AS percentual_com_biblioteca_e_internet
+            FROM escolas
+            WHERE sg_uf IS NOT NULL
+            GROUP BY regiao
+            ORDER BY percentual_com_biblioteca_e_internet DESC;
+        """
+
+    }, 
+    {
+        "descricao": "10. Média da taxa de participação no ENEM por região (CONSULTA P2)",
+        "sql": """
+        SELECT 
+            regiao,
+            SUM(total_escolas) AS total_escolas,
+            ROUND(AVG(CASE WHEN tp_localizacao = 'Urbana' THEN nu_taxa_participacao END), 2) AS media_urbana,
+            ROUND(AVG(CASE WHEN tp_localizacao = 'Rural' THEN nu_taxa_participacao END), 2) AS media_rural
+        FROM (
+            SELECT 
+                CASE 
+                    WHEN sg_uf IN ('AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO') THEN 'Norte'
+                    WHEN sg_uf IN ('AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE') THEN 'Nordeste'
+                    WHEN sg_uf IN ('DF', 'GO', 'MT', 'MS') THEN 'Centro-Oeste'
+                    WHEN sg_uf IN ('ES', 'MG', 'RJ', 'SP') THEN 'Sudeste'
+                    WHEN sg_uf IN ('PR', 'RS', 'SC') THEN 'Sul'
+                    ELSE 'Indefinida'
+                END AS regiao,
+                tp_localizacao,
+                nu_taxa_participacao,
+                1 AS total_escolas
+            FROM escolas
+            WHERE 
+                nu_taxa_participacao IS NOT NULL AND
+                tp_localizacao IS NOT NULL AND
+                sg_uf IS NOT NULL
+            )
+            GROUP BY regiao
+            ORDER BY regiao;
+        """
     }
+    
+
 ]
 
 
@@ -157,7 +215,7 @@ def create_tables():
 
 def insert_data():
     print("Iniciando importação de dados...")
-    df_escolas = pd.read_csv('/path/to/escolas.csv')  # botar caminho para o arquivo csv
+    df_escolas = pd.read_csv('/Users/leonardo.giovanelli/Downloads/MC536-P2-main/escolas.csv')  # botar caminho para o arquivo csv
     # registrar o dataframe
     con.register('df_escolas', df_escolas)
     con.execute("insert into escolas select * from df_escolas")
