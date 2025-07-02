@@ -1,5 +1,6 @@
 # Projeto MC536
 > Projeto 2 da disciplina de Banco de Dados MC536 da Unicamp
+
 > No código tables.py favor ajustar os caminhos para o csv escolas.csv (linha 218) e para banco de dados database.duckdb (linha 8) em sua máquina.
 
 ## 🌎 Objetivo de Desenvolvimento Sustentável
